@@ -13,44 +13,41 @@ type AdminMsg struct {
    Cmd string    `json:"cmd"`
    Rate    int         `json:"rate"`
 //   Partner    string    `json:"partner"`
+//   Sequence int   `json:"seq"`              //add for debugging
 }
 
-
+// status/discovery message
 type StatusMsg struct {
-    Name string    `json:"name"`
-    Type    string    `json:"type"`
-    State    string    `json:"state"`
-    Rate    int           `json:"rate"`
-    Partner    string    `json:"partner"`
-     Lost  int    `json:"lost"`
-     Latency  int    `json:"latency"`
-     Sequence int   `json:"seq"`
+    Name string    `json:"name"`             //POD instance name
+    Type    string    `json:"type"`               // always status
+    State    string    `json:"state"`             //idle or run
+    Rate    int           `json:"rate"`                // get requests per second to issue
+    Partner    string    `json:"partner"` // place holder
+     Lost  int    `json:"lost"`                          //sequence numbers not returned
+     Latency  int    `json:"latency"`          //total round trip lantency 
+     Sequence int   `json:"seq"`              //status sequency number, used to detect restarts
 }
 
-
-
-  type Config struct {
+type Config struct {
       state int
       rate int
       totalSent int
       lastLatencey int
       lost int
-
-
-
-
   }
 
-  var config = Config{}
+var config = Config{}            //global config and state info
 
-
+//Go routine to generate https get requests
 func genEvents () {
 
+    currentTime := time.Now()
     for {
         if config.state == 1 {
-             fmt.Printf("send hhtps ger\n")
+            currentTime = time.Now()
+             fmt.Printf("send hhtps gen %s\n", currentTime.Format("2006.01.02 15:04:05"))
              config.totalSent++
-             time.Sleep(10)
+             time.Sleep(2* time.Second)
         }
     }
 }
@@ -69,7 +66,7 @@ func brokerSubscribe () {
     opts.SetDefaultPublishHandler( func(client mqtt.Client, msg mqtt.Message) {
           fmt.Printf("Received message: %s from topic: %s\n", msg.Payload(), msg.Topic())
           var adminMsg = AdminMsg{}
-          err := json.Unmarshal(msg.Payload(),adminMsg )
+          err := json.Unmarshal(msg.Payload(),&adminMsg )
           if err != nil {
               panic(err.Error())
           }
@@ -90,7 +87,7 @@ func brokerSubscribe () {
         panic(token.Error())
     }
 
-    topic := "Admin"
+    topic := "admin"
     token := client.Subscribe(topic, 1, nil)
     token.Wait()
 }
@@ -133,17 +130,17 @@ func brokerPublish( ) {
 
                 token := client.Publish("status", 0, false, payload)
                 token.Wait()
-                fmt.Printf("send msg %d  %s\n", sequence,  payload)
+                fmt.Printf("send status %d  %s\n", sequence,  payload)
                 time.Sleep(10 * time.Second)  //sleep for 10 seconds
         }
 }
 
 func main() {
-    config.state = 0            //mark idle
+    config.state = 0            //mark idle from the start
 
-   go brokerSubscribe ()
-   go brokerPublish()
-   go genEvents()
+   go brokerSubscribe ()  //look fro admin start/stop events
+   go brokerPublish()         //discovery and status heart beat
+   go genEvents()                 //actual https get engine
 
    for {
    }
